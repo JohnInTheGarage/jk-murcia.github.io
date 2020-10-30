@@ -1,0 +1,282 @@
+<html>
+  <head>
+    <script>
+      var obsLatitude = 0.0;
+      var obsLongitude = 0.0;
+      var objDeclination = 0.0;
+      var objRA = 0.0;
+      var objAltitude = 0.0;
+      var objAzimuth = 0.0;
+
+      var decRadians = 0.0;
+      var phiRadians = 0.0;
+      var haRadians = 0.0;
+      var altRadians = 0.0;
+      var aziRadians = 0.0;
+
+      var yearOffset = [7303.5, 7669.5, 8034.5, 8399.5]; // 0 = year 2020
+      var monthoffset = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+      var monthoffsetleap = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 ];
+
+
+      /*
+
+mmonth  normal   leap
+Jan       0        0   |  1998   -731.5  |   2010  3651.5
+Feb      31       31   |  1999   -366.5  |   2011  4016.5
+Mar      59       60   |  2000     -1.5  |   2012  4381.5
+Apr      90       91   |  2001    364.5  |   2013  4747.5
+May     120      121   |  2002    729.5  |   2014  5112.5
+Jun     151      152   |  2003   1094.5  |   2015  5477.5
+Jul     181      182   |  2004   1459.5  |   2016  5842.5
+Aug     212      213   |  2005   1825.5  |   2017  6208.5
+Sep     243      244   |  2006   2190.5  |   2018  6573.5
+Oct     273      274   |  2007   2555.5  |   2019  6938.5
+Nov     304      305   |  2008   2920.5  |   2020  7303.5
+Dec     334      335   |  2009   3286.5  |   2021  7669.5
+     */
+
+    function calcHorizontals() {
+        observerLatitude = getFormItem("LatitudeObserver");
+        observerLongitude = getFormItem("LongititudeObserver");
+
+        LST = limit360(getLST(observerLongitude, new Date()));
+
+        RA = getObjRA();
+        HA = limit360(LST - RA);
+
+        decRadians = degToRad(getFormItem("objectDec"));
+        phiRadians = degToRad(observerLatitude);
+        haRadians = degToRad(HA);
+
+        setFormItem("objectAlt", getHorAltitude(), 2);
+        setFormItem("objectAzi", getHorAzimuth(), 2);
+    }
+
+    function calcEquatorials() {
+        observerLatitude = getFormItem("LatitudeObserver");
+        observerLongitude = getFormItem("LongititudeObserver");
+        LST = limit360(getLST(observerLongitude, new Date()));
+
+        aziRadians = degToRad(getFormItem("objectAzi"));
+        phiRadians = degToRad(observerLatitude);
+        altRadians = degToRad(getFormItem("objectAlt"));
+        decDegrees = getEQDeclination();
+
+        eqHourDegrees = getEQHourAngle();
+        eqHourDecimal = eqHourDegrees / 15;
+        LSTdecimal = LST / 15;
+        tempEQhour = LSTdecimal - eqHourDecimal;
+        if (tempEQhour < 0) {
+          tempEQhour += 24;
+        }
+
+        eqHour = Math.floor(tempEQhour);
+        eqMin = 60 * (tempEQhour - eqHour);
+
+        setFormItem("objectRAHour", eqHour, 0);
+        setFormItem("objectRAMin", eqMin, 1);
+        setFormItem("objectDec", decDegrees, 2);
+    }
+
+    function getHorAltitude() {
+        sinALT =
+          Math.sin(decRadians) * Math.sin(phiRadians) +
+          Math.cos(decRadians) * Math.cos(phiRadians) * Math.cos(haRadians);
+        //Somewhat ugly - the Azimuth routine needs the intermediate result of altRadians
+        altRadians = Math.asin(sinALT);
+        return radToDeg(altRadians);
+    }
+
+    function getHorAzimuth() {
+        sinHourAngle = 0.0 + Math.sin(haRadians);
+        AZ =
+          (Math.sin(decRadians) - Math.sin(phiRadians) * Math.sin(altRadians)) /
+          (Math.cos(phiRadians) * Math.cos(altRadians));
+        if (sinHourAngle > 0) {
+          return 360 - radToDeg(Math.acos(AZ));
+        }
+        return radToDeg(Math.acos(AZ));
+    }
+
+      // Could unify with getAltitude
+    function getEQDeclination() {
+        //console.log("getEQDeclination...");
+        //console.log("sinAlt (" +Math.sin(altRadians) +") sinLat ("+ Math.sin(phiRadians) +") cosAlt("+ Math.cos(altRadians) +") cosLat("+ Math.cos(phiRadians) +") cosAzi("+ Math.cos(aziRadians) +")");
+        sinDEC =
+          Math.sin(altRadians) * Math.sin(phiRadians) +
+          Math.cos(altRadians) * Math.cos(phiRadians) * Math.cos(aziRadians);
+        //console.log("sinDec (" +sinDEC);
+        //Somewhat ugly - the HourAngle routine needs the intermediate result of decRadians
+        decRadians = Math.asin(sinDEC);
+        //console.log("DecRadians "+decRadians + ", returns radtodeg:" +radToDeg(decRadians));
+        return radToDeg(decRadians);
+    }
+
+      // could unify with getAzimuth
+    function getEQHourAngle() {
+        sinAzimuth = Math.sin(aziRadians);
+        //console.log("getEQHourAngle...");
+        //console.log("sinAzimuth "+sinAzimuth);
+        //console.log("Exponents sin Alt(" +Math.sin(altRadians) +")  sin Lat("+ Math.sin(phiRadians)  +")  sin Dec("+ Math.sin(decRadians) +")");
+        //console.log("Divisors cosLat(" + Math.cos(phiRadians) +")  cosDec("+ Math.cos(decRadians) +")");
+        EQ_Hour =
+          (Math.sin(altRadians) - Math.sin(phiRadians) * Math.sin(decRadians)) /
+          (Math.cos(phiRadians) * Math.cos(decRadians));
+
+        if (sinAzimuth > 0) {
+          //console.log ("result "+EQ_Hour);
+          //console.log ("return components Math.acos(EQ_Hour):" +Math.acos(EQ_Hour)) +" radToDeg(Math.acos(EQ_Hour)): "+radToDeg(Math.acos(EQ_Hour));
+          return 360 - radToDeg(Math.acos(EQ_Hour));
+        }
+        return radToDeg(Math.acos(EQ_Hour));
+    }
+
+    function getLST(longitude, ObsDateTime) {
+        /*
+		Local siderial time:
+		LST = 100.46 + 0.985647 * d + long + 15*UT
+
+		d    is the days from J2000, including the fraction of
+			 a day
+		UT   is the universal time in decimal hours
+		long is your longitude in decimal degrees, East positive.
+
+		Add or subtract multiples of 360 to bring LST in range 0 to 360
+		degrees.
+		 */
+        // UTC
+
+        yyyy = ObsDateTime.getUTCFullYear();
+        mm = ObsDateTime.getUTCMonth();
+        d = 0.0 + yearOffset[yyyy - 2020];
+        if (yyyy == 2020) {
+          d += monthoffsetleap[mm];
+        } else {
+          d += monthoffset[mm];
+        }
+        d += ObsDateTime.getUTCDate();
+
+        utcMin = 0.0 + ObsDateTime.getUTCMinutes();
+        utcHour = 0.0 + ObsDateTime.getUTCHours();
+
+        dayFraction = 0.0 + (utcHour + utcMin / 60) / 24;
+        d += dayFraction;
+        UT = 0.0;
+        LST = 0.0;
+        UT = utcHour + utcMin / 60;
+        LST = 100.46 + 0.985647 * d + longitude + UT * 15;
+
+        return LST;
+    }
+
+    function degToRad(degrees) {
+        return degrees * (Math.PI / 180);
+    }
+
+    function radToDeg(rad) {
+        return rad / (Math.PI / 180);
+    }
+
+    function limit360(num) {
+        while (num < 0.0) {
+          num += 360.0;
+        }
+        while (num > 360.0) {
+          num -= 360.0;
+        }
+        return num;
+    }
+
+    function getFormItem(item) {
+        formVal = document.getElementById(item).value;
+        return parseFloat(formVal);
+    }
+
+    function setFormItem(item, content, places) {
+        document.getElementById(item).value = content.toFixed(places);
+    }
+
+    function getObjAltitude() {
+        return objAltitude;
+    }
+
+    function getObjAzimuth() {
+        return objAzimuth;
+    }
+
+    function getObjRA() {
+        H = getFormItem("objectRAHour");
+        M = getFormItem("objectRAMin");
+        return (H + M / 60) * 15;
+    }
+
+    function getLocation(){
+        navigator.geolocation.getCurrentPosition(getLatLon);
+    }
+
+    function getLatLon(position) {
+        document.getElementById("locationMessage").innerText="";
+        var latitude = position.coords.latitude;
+        var longitude = position.coords.longitude;
+        //console.log("Latitude is "+latitude);
+        //console.log("Longitude is "+longitude);
+        setFormItem("LatitudeObserver", latitude, 2);
+        setFormItem("LongititudeObserver", longitude, 2);
+    }
+
+    
+    </script>
+  </head>
+
+  <body onLoad="getLocation()">
+  <style>
+    .rounded {
+        border: 2px solid;
+        border-radius: 5px;
+    }
+  </style>    
+    <h2>Alt-Azimuth <--> Equatorial converter  (requires current time and location)</h2>
+
+    <!--form-->
+      <div>
+        <span id="locationMessage">Enter your </span><span>Latitude and Longitude:</span>    
+        <p>Latitude
+        <input type="text" id="LatitudeObserver" size="6" /> Longitude
+        <input type="text" id="LongititudeObserver" size="6" />
+        </p>
+      </div>
+      <p>
+      Enter either Equatorial or Alt-Azimuth coordinates and choose the button to calculate the other set.
+      </p>
+      <br/><br/>
+      <div class="rounded">
+      <p></p>    
+      Equatorial Coordinates
+      <p>  
+      Hour <input type="text" id="objectRAHour" size="6" /> Min
+      <input type="text" id="objectRAMin" size="6" /> Declination
+      <input type="text" id="objectDec" size="6" />
+      </p>
+      <p>
+      <button onClick="calcHorizontals()">calculate</button> Alt-Azimuth
+      </p>
+    </div>
+
+    <p>&nbsp;</p>
+
+    <div class="rounded">
+      <br/><br/>
+      Alt-Azimuth Coordinates
+      <p>
+      Altitude <input type="text" id="objectAlt" size="6" /> Azimuth
+      <input type="text" id="objectAzi" size="6" />
+      </p>
+      <p>
+      <button onClick="calcEquatorials()">calculate</button> Equatorial 
+      </p>
+    </div>
+    <!--/form-->
+
+</body>
+</html>
