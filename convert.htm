@@ -1,5 +1,6 @@
 <html>
   <head>
+    <link rel="stylesheet" href="styles.css">
     <script>
       var obsLatitude = 0.0;
       var obsLongitude = 0.0;
@@ -14,7 +15,7 @@
       var altRadians = 0.0;
       var aziRadians = 0.0;
 
-      var yearOffset = [7303.5, 7669.5, 8034.5, 8399.5]; // 0 = year 2020
+      var yearOffset = [7303.5, 7669.5, 8034.5, 8399.5]; // years 2020..2023 
       var monthoffset = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
       var monthoffsetleap = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 ];
 
@@ -37,15 +38,22 @@ Dec     334      335   |  2009   3286.5  |   2021  7669.5
      */
 
     function calcHorizontals() {
-        observerLatitude = getFormItem("LatitudeObserver");
-        observerLongitude = getFormItem("LongititudeObserver");
-
+        if (!fetchAndValidateLatLong()){
+          return;
+        }
         LST = limit360(getLST(observerLongitude, new Date()));
 
         RA = getObjRA();
+        if (RA < 0){
+          return;
+        }
         HA = limit360(LST - RA);
+        decForm = getFormItem("objectDec");
+        if (!limitsOK(decForm, -90, 90, "Declination")){
+            return;
+        }
 
-        decRadians = degToRad(getFormItem("objectDec"));
+        decRadians = degToRad(decForm);
         phiRadians = degToRad(observerLatitude);
         haRadians = degToRad(HA);
 
@@ -54,13 +62,23 @@ Dec     334      335   |  2009   3286.5  |   2021  7669.5
     }
 
     function calcEquatorials() {
-        observerLatitude = getFormItem("LatitudeObserver");
-        observerLongitude = getFormItem("LongititudeObserver");
+        if (!fetchAndValidateLatLong()){
+          return;
+        }
+
         LST = limit360(getLST(observerLongitude, new Date()));
 
-        aziRadians = degToRad(getFormItem("objectAzi"));
+        aziForm = getFormItem("objectAzi");
+        if (!limitsOK(aziForm, 0, 360, "Azimuth")){
+          return;
+        }
+        altForm = getFormItem("objectAlt");
+        if (!limitsOK(altForm, 0, 90, "Altitude")){
+          return;
+        }
+        aziRadians = degToRad(aziForm);
         phiRadians = degToRad(observerLatitude);
-        altRadians = degToRad(getFormItem("objectAlt"));
+        altRadians = degToRad(altForm);
         decDegrees = getEQDeclination();
 
         eqHourDegrees = getEQHourAngle();
@@ -99,38 +117,29 @@ Dec     334      335   |  2009   3286.5  |   2021  7669.5
         return radToDeg(Math.acos(AZ));
     }
 
-      // Could unify with getAltitude
+      // Could unify with getHorAltitude
     function getEQDeclination() {
-        //console.log("getEQDeclination...");
-        //console.log("sinAlt (" +Math.sin(altRadians) +") sinLat ("+ Math.sin(phiRadians) +") cosAlt("+ Math.cos(altRadians) +") cosLat("+ Math.cos(phiRadians) +") cosAzi("+ Math.cos(aziRadians) +")");
         sinDEC =
           Math.sin(altRadians) * Math.sin(phiRadians) +
           Math.cos(altRadians) * Math.cos(phiRadians) * Math.cos(aziRadians);
-        //console.log("sinDec (" +sinDEC);
         //Somewhat ugly - the HourAngle routine needs the intermediate result of decRadians
         decRadians = Math.asin(sinDEC);
-        //console.log("DecRadians "+decRadians + ", returns radtodeg:" +radToDeg(decRadians));
         return radToDeg(decRadians);
     }
 
-      // could unify with getAzimuth
+      // could unify with getHorAzimuth
     function getEQHourAngle() {
         sinAzimuth = Math.sin(aziRadians);
-        //console.log("getEQHourAngle...");
-        //console.log("sinAzimuth "+sinAzimuth);
-        //console.log("Exponents sin Alt(" +Math.sin(altRadians) +")  sin Lat("+ Math.sin(phiRadians)  +")  sin Dec("+ Math.sin(decRadians) +")");
-        //console.log("Divisors cosLat(" + Math.cos(phiRadians) +")  cosDec("+ Math.cos(decRadians) +")");
         EQ_Hour =
           (Math.sin(altRadians) - Math.sin(phiRadians) * Math.sin(decRadians)) /
           (Math.cos(phiRadians) * Math.cos(decRadians));
 
         if (sinAzimuth > 0) {
-          //console.log ("result "+EQ_Hour);
-          //console.log ("return components Math.acos(EQ_Hour):" +Math.acos(EQ_Hour)) +" radToDeg(Math.acos(EQ_Hour)): "+radToDeg(Math.acos(EQ_Hour));
           return 360 - radToDeg(Math.acos(EQ_Hour));
         }
         return radToDeg(Math.acos(EQ_Hour));
     }
+
 
     function getLST(longitude, ObsDateTime) {
         /*
@@ -205,9 +214,28 @@ Dec     334      335   |  2009   3286.5  |   2021  7669.5
         return objAzimuth;
     }
 
+    function fetchAndValidateLatLong(){
+        observerLatitude = getFormItem("LatitudeObserver");
+        observerLongitude = getFormItem("LongititudeObserver");
+        if (!limitsOK(observerLatitude, -90, 90, "Latitude")){
+          return false;
+        }
+        if (!limitsOK(observerLongitude, -180, 180, "Longitude")){
+          return false;
+        }
+        return true;
+    }
+
     function getObjRA() {
         H = getFormItem("objectRAHour");
         M = getFormItem("objectRAMin");
+        if (!limitsOK(H, 0, 23, "RA hours")){
+          return -1;
+        }
+        if (!limitsOK(M, 0, 59.9999, "RA Minutes")){
+          return -1;
+        }
+
         return (H + M / 60) * 15;
     }
 
@@ -219,45 +247,46 @@ Dec     334      335   |  2009   3286.5  |   2021  7669.5
         document.getElementById("locationMessage").innerText="";
         var latitude = position.coords.latitude;
         var longitude = position.coords.longitude;
-        //console.log("Latitude is "+latitude);
-        //console.log("Longitude is "+longitude);
         setFormItem("LatitudeObserver", latitude, 2);
         setFormItem("LongititudeObserver", longitude, 2);
     }
 
+    function limitsOK(item, min, max, name){
+        if (item > max || item  < min){
+          alert(name + " limits exceeded");
+          return false;
+        }
+        return true;
+    }
     
     </script>
   </head>
 
   <body onLoad="getLocation()">
-  <style>
-    .rounded {
-        border: 2px solid;
-        border-radius: 5px;
-    }
-  </style>    
-    <h2>Alt-Azimuth <--> Equatorial converter  (requires current time and location)</h2>
-
-    <!--form-->
+    <h2>Alt-Azimuth <--> Equatorial converter 2020-11-05</h2>
+    <h3>(Uses current time and location)</h3>
+    
       <div>
-        <span id="locationMessage">Enter your </span><span>Latitude and Longitude:</span>    
+        <span id="locationMessage">Enter your </span><span>Latitude and Longitude:</span>   
         <p>Latitude
         <input type="text" id="LatitudeObserver" size="6" /> Longitude
         <input type="text" id="LongititudeObserver" size="6" />
+        <br/>(Latitude +/- 0-90 degrees, decimals valid.  Longitude +/- 0-180, decimals valid, west of Greenwich is negative)
         </p>
       </div>
       <p>
-      Enter either Equatorial or Alt-Azimuth coordinates and choose the button to calculate the other set.
+        <br/><br/>Enter either Equatorial or Alt-Azimuth coordinates and choose the button to calculate the other set.
       </p>
-      <br/><br/>
+      
       <div class="rounded">
       <p></p>    
-      Equatorial Coordinates
+     From Equatorial Coordinates :
       <p>  
       Hour <input type="text" id="objectRAHour" size="6" /> Min
       <input type="text" id="objectRAMin" size="6" /> Declination
       <input type="text" id="objectDec" size="6" />
       </p>
+      (Hour 0-23. Min 0-59, decimals valid. Declination +/- 0-90 degrees, decimals valid.)
       <p>
       <button onClick="calcHorizontals()">calculate</button> Alt-Azimuth
       </p>
@@ -267,16 +296,16 @@ Dec     334      335   |  2009   3286.5  |   2021  7669.5
 
     <div class="rounded">
       <br/><br/>
-      Alt-Azimuth Coordinates
+     From Alt-Azimuth Coordinates :
       <p>
       Altitude <input type="text" id="objectAlt" size="6" /> Azimuth
       <input type="text" id="objectAzi" size="6" />
       </p>
+      (Altitute 0-90 degrees, decimals valid. Azimuth 0-360 degrees, decmials valid.)
       <p>
       <button onClick="calcEquatorials()">calculate</button> Equatorial 
       </p>
     </div>
-    <!--/form-->
 
 </body>
 </html>
